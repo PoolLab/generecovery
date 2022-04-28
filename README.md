@@ -2,10 +2,10 @@ This is the code repository for the bioRxiv manuscript "Enhanced recovery of sin
 can untar them in your terminal similarly to 
 
 If you are interested in optimizing your own transcriptomic reference with your own sequencing data, the code for doing that can be found in the following to R files:
-* "1-Genome annotation pre-processing.R"
+* "1_Genome annotation pre-processing.R"
 * "2_Optimized _annotation_assembler.R"
 
 
 Finally, if you are interested in reproducing analysis in this paper, you will find the raw data for the paper in the Gene Expression Omnibus Repository GSE198528 and the code for analysis and figures in "3_Manuscript data analysis code repository.R".
 
-For any questions, comments or suggestions please reach out to allan-hermann.pool@utsouthwestern.edu.# generecovery
+For any questions, comments or suggestions please reach out to allan-hermann.pool@utsouthwestern.edu.
