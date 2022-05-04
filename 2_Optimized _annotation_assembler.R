@@ -98,7 +98,7 @@ for (i in 1:dim(right_genes)[1]){
 }
 
 
-#### 4. Add pre-mRNA transcripts to genes not in the gene overelap list ####
+#### 4. Add pre-mRNA transcripts to genes not in the gene overlap list ####
 ############################################################################
 
 # Explanation: Cellranger --include-introns mode unfortunately does not pick up on many intronic reads (unclear why despite lengthy correspondence with their support). I can pick those up however if I add the pre-mRNA transcripts to respective genes as exons with new transcript_id values.
