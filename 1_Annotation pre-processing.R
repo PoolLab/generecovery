@@ -26,9 +26,6 @@
 # 2. Cell Ranger aligned scRNA-seq sequencing data (.bam file)
 # 3. Optional: Refseq genome annotation for rapid extension of 3' gene ends in the 10x Genomics/Ensembl genome annotation. Can be accessed from UCSC genome browser: http://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/ for mice and https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/ where I downloaded hg38.ncbiRefSeq.gtf.gz for humans.
 
-# Required environments:
-# 
-
 ###################################################
 #### A. Resolve gene overlap derived read loss ####
 ###################################################
