@@ -11,7 +11,7 @@
 # the genome annotation ("xxx.gtf") file that transcriptomic references are based on.  The 
 # following three aspects of genome annotations need to be optimized:
 # A) Resolving gene overlap derived read loss;
-# B) Recovering intergenic reads from 3' un-annotated exons; and
+# B) Recovering intergenic reads from 3’ un-annotated exons; and
 # C) Recovering intronic reads.
 
 # After optimizing and assembling the genome annotation, you can use "cellranger mkref"
@@ -25,6 +25,7 @@
 # 1. Genome annotation file ("xxx.gtf" file, from 10x Genomics provided reference transcriptome "gene" folder: can be downloaded at "https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest" or Ensembl.org if wish to customize more)
 # 2. Cell Ranger aligned scRNA-seq sequencing data (.bam file)
 # 3. Optional: Refseq genome annotation for rapid extension of 3' gene ends in the 10x Genomics/Ensembl genome annotation. Can be accessed from UCSC genome browser: http://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/ for mice and https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/ where I downloaded hg38.ncbiRefSeq.gtf.gz for humans.
+
 
 ###################################################
 #### A. Resolve gene overlap derived read loss ####
@@ -97,7 +98,7 @@ write.csv(overlapping_gene_list, "overlapping_gene_list.csv")
 
 
 ################################################################
-#### B. Recover intergenic reads from 3' un-annotated exons ####
+#### B. Recover intergenic reads from 3’ un-annotated exons ####
 ################################################################
 
 
@@ -400,7 +401,7 @@ library("rtracklayer")
 
 exonic_df<- import(con = '<location_of_genome_annotation>/name.gtf', format = "gtf") # Import the original exonic genome annotation file
 exonic_df = as.data.frame(exonic_df)
-premrna_df = exonic_df[exonic_df$type == "transript",] # Extract all "transcript" entries in the genome annotation to a new variable
+premrna_df = exonic_df[exonic_df$type == "transcript",] # Extract all "transcript" entries in the genome annotation to a new variable
 premrna_df = premrna_df$feature = rep("exon", nrow(premrna_df)) # Rename all "feature" 
 
 premrna_df = makeGRangesFromDataFrame(premrna_df, keep.extra.columns=TRUE)
