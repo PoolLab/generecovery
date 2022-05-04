@@ -105,7 +105,7 @@ for (i in 1:dim(right_genes)[1]){
 
 ## Genes to modify
 
-overlap_df$genes # genes to exclude
+overlap_df$genes # genes to exclude from premrna reference appending
 
 genes_to_append = unique(new_df$gene_name)
 genes_to_append = setdiff(genes_to_append, overlap_df$genes)
@@ -116,9 +116,12 @@ for (i in 1:dim(premrna_df)[1]){
   premrna_df$transcript_id[i] = as.character(i)
 }
 
-## Reformat the final gtf dataframe such that we can add premrna data to it
+## Reformat the gtf dataframes such that we can add premrna entries to the original exonic entries and thus compile a hybrid reference for capturing intronic reads
 
-new_df = new_df[, colnames(premrna_df)]
+final_colnames = intersect(colnames(new_df), colnames(premrna_df))
+
+new_df = new_df[, final_colnames]
+premrna_df = premrna_df[, final_colnames]
 
 ## Append premrna transcript to the end of the gene
 
