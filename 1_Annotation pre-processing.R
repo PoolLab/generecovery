@@ -104,6 +104,7 @@ write.csv(overlapping_gene_list, "overlapping_gene_list.csv")
 
 #### Instantiate libraries and define inputs
 
+library("GenomicAlignments")
 library("GenomicFeatures")
 library("GenomicRanges")
 library("rtracklayer") # For coercing data to bed format
