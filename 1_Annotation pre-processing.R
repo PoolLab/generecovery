@@ -403,7 +403,7 @@ library("rtracklayer")
 exonic_df<- import(con = '<location_of_genome_annotation>/name.gtf', format = "gtf") # Import the original exonic genome annotation file
 exonic_df = as.data.frame(exonic_df)
 premrna_df = exonic_df[exonic_df$type == "transcript",] # Extract all "transcript" entries in the genome annotation to a new variable
-premrna_df = premrna_df$feature = rep("exon", nrow(premrna_df)) # Rename all "feature" 
+premrna_df$feature = rep("exon", nrow(premrna_df)) # Rename all "feature" 
 
 premrna_df = makeGRangesFromDataFrame(premrna_df, keep.extra.columns=TRUE)
 rtracklayer::export(premrna_df, "premrna.gtf", format = "gtf")
