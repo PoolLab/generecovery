@@ -3,6 +3,9 @@
 ####################################################################
 
 library("Seurat")
+
+# Load data
+
 MnPO.data = read.csv("./MnPO_neurons_clean_exon.csv", header = T, row.names = 1)
 MnPO_neuro_dbase <- CreateSeuratObject(MnPO.data, min.features = 0, min.cells = 0, project = "MnPO_neuro")
 
