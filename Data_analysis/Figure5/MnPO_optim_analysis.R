@@ -1,18 +1,23 @@
 
+###########################################################################
+#### ScRNA-seq analysis of optimal reference mapped MnPO neuronal data ####
+###########################################################################
 
-#### Load in cells (only first time)
+library("Seurat")
 
-MnPO.data = read.csv("C:/Users/allan/OneDrive/Science/Pool lab/Own papers/2022/Helen Allan Computational Paper/Data/MnPO_scRNAseq_analysis/MnPO_neurons_clean_opt_v2.csv", header = T, row.names = 1) # without doublets
+# Load in cells 
+
+MnPO.data = read.csv(./MnPO_neurons_clean_opt_v2.csv", header = T, row.names = 1) # without doublets
 MnPO_neuro_dbase3 <- CreateSeuratObject(MnPO.data, min.features = 0, min.cells = 0, project = "MnPO_neuro")
 
 # Plot QC data
 
-VlnPlot(object = MnPO_neuro_dbase3, features = c("nFeature_RNA", "nCount_RNA", "percent.mito"))
+VlnPlot(object = MnPO_neuro_dbase2, features = c("nFeature_RNA", "nCount_RNA", "percent.mito"))
 
 # Print metrics
 
-length(Cells(MnPO_neuro_dbase3)) # number of cells
-median(MnPO_neuro_dbase3$nFeature_RNA) # Median resoultion in genes/cell
+length(Cells(MnPO_neuro_dbase2)) # number of cells
+median(MnPO_neuro_dbase2$nFeature_RNA) # Median resoultion in genes/cell
 
 
 # Data normalization
