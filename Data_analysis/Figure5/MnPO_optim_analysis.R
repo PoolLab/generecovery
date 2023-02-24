@@ -5,9 +5,9 @@
 
 library("Seurat")
 
-# Load in cells 
+# Load cells 
 
-MnPO.data = read.csv(./MnPO_neurons_clean_opt_v2.csv", header = T, row.names = 1) # without doublets
+MnPO.data = read.csv(./MnPO_neurons_clean_optim.csv", header = T, row.names = 1) # without doublets
 MnPO_neuro_dbase3 <- CreateSeuratObject(MnPO.data, min.features = 0, min.cells = 0, project = "MnPO_neuro")
 
 # Plot QC data
@@ -38,7 +38,7 @@ MnPO_neuro_dbase2 <- RunPCA(object = MnPO_neuro_dbase2, features = VariableFeatu
 
 # Determining which PCs to use is to look at a plot of the standard deviations of the principle components and draw your cutoff where there is a clear elbow in the graph
 
-ElbowPlot(object = MnPO_neuro_dbase3, reduction = "pca", ndims = 40)
+ElbowPlot(object = MnPO_neuro_dbase2, reduction = "pca", ndims = 40)
 
 # Find clusters
 
