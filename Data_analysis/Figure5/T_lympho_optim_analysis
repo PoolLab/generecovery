@@ -1,0 +1,37 @@
+#### Analysis of human T-lymphocytes from PBMC data mapped to optimal scRNA-seq reference
+
+# Load in cells
+
+PBMC2.data = read.csv("./T_lymphocytes_optimized_v2_mapping.csv", header = T, row.names = 1)  # change folder if data is not saved in the same location
+PBMC2_lymph_dbase <- CreateSeuratObject(PBMC2.data, min.features = 0, min.cells = 0, project = "PBMC2_lymph")
+
+# Plot QC and probe basic data metrics
+
+VlnPlot(object = PBMC2_lymph_dbase, features = c("nFeature_RNA", "nCount_RNA", "percent.mito"))
+length(Cells(PBMC2_lymph_dbase)) # number of cells
+median(PBMC2_lymph_dbase$nFeature_RNA) # Median resoultion in genes/cell
+
+# Data normalization
+
+PBMC2_lymph_dbase <- NormalizeData(object = PBMC2_lymph_dbase, normalization.method = "LogNormalize", scale.factor = 10000)
+
+# New variable feature detection
+
+PBMC2_lymph_dbase <- FindVariableFeatures(object = PBMC2_lymph_dbase, selection.method = "vst", nfeatures = 450, loess.span = 0.3, clip.max = "auto")
+
+# Scale data
+
+PBMC2_lymph_dbase <- ScaleData(object = PBMC2_lymph_dbase, do.scale = TRUE, do.center = TRUE) # vars.to.regress = c("percent.mito", "nCount_RNA")
+
+# Carry out PCA and evaluate PC dimensions
+
+PBMC2_lymph_dbase <- RunPCA(object = PBMC2_lymph_dbase, features = VariableFeatures(object=PBMC2_lymph_dbase), verbose = TRUE, ndims.print = 1:5, nfeatures.print = 5, npcs=40, seed.use = 42)
+ElbowPlot(object = PBMC2_lymph_dbase, reduction = "pca", ndims = 40)
+
+# Find clusters
+PBMC2_lymph_dbase <- FindNeighbors(object = PBMC2_lymph_dbase, dims = 1:11, reduction = "pca", compute.SNN = TRUE, verbose = TRUE)
+PBMC2_lymph_dbase <- FindClusters(object = PBMC2_lymph_dbase, resolution = 1.2, modularity.fxn = 1, algorithm = 1, n.start = 10, n.iter = 10, random.seed = 1, verbose = TRUE)
+
+#Run Non-linear dimensional reduction (tSNE)
+PBMC2_lymph_dbase <- RunTSNE(object = PBMC2_lymph_dbase, dims = 1:11, reduction = "pca", tsne.method = "Rtsne", seed.use = 36, dim.embed = 2, perplexity = 25)
+DimPlot(object = PBMC2_lymph_dbase, reduction = "tsne", label = TRUE, pt.size = 1.15, label.size = 3) + NoLegend() # group.by = "orig.ident",  label.size = 5
