@@ -1,0 +1,4 @@
+In order to generate the optimized genome annotation we need to provide the initial genome annotation as input to the "2_Optimized_annotation_assembler.R" code.
+Popular unoptimized genome annotation for the mm10 mouse genome build is provided within the latest mouse reference transcriptome provided by 10x Genomics and
+which is avilable from https://cf.10xgenomics.com/supp/cell-exp/refdata-gex-mm10-2020-A.tar.gz. The genome annotation can be found in the "genes" subfolder under
+the name "genes.gtf".
