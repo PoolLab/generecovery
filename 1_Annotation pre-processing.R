@@ -11,7 +11,7 @@
 # the genome annotation ("xxx.gtf") file that transcriptomic references are based on.  The 
 # following three aspects of genome annotations need to be optimized:
 # A) Resolving gene overlap derived read loss;
-# B) Recovering intergenic reads from 3’ un-annotated exons; and
+# B) Recovering intergenic reads from 3' un-annotated exons; and
 # C) Recovering intronic reads.
 
 # After optimizing and assembling the genome annotation, you can use "cellranger mkref"
@@ -38,14 +38,22 @@
 # rare gene-expression obscuring transcripts and pseudogenes/gene models.
 
 
-
 #### A1: Generate a rank-ordered gene list of same-strand overlapping genes ####
 ################################################################################
 
+install.packages("BiocManager")
+BiocManager::install("rtracklayer")
+BiocManager::install("GenomicRanges")
+BiocManager::install("GenomicAlignments")
+BiocManager::install("IRanges")
+install.packages("stringr")
+
 library("rtracklayer")
 library("GenomicRanges")
+library("stringr")
 
-exonic_df<- import(con = '<location_of_genome_annotation>/name.gtf', format = "gtf") # Import the original exonic genome annotation file
+
+exonic_df<- import(con = '<location of the unoptimized genome annotation>/genes.gtf', format = "gtf") # Import the original exonic genome annotation file
 exonic_df = as.data.frame(exonic_df)
 genes_df = exonic_df[exonic_df$type == "gene",1:13] # Extract all "gene" entries in the genome annotation to a new variable
 row.names(genes_df) = 1:nrow(genes_df)
@@ -68,7 +76,7 @@ for (i in 1:length(gene_names)){
 }
 
 overlapping_gene_list = as.data.frame(cbind(gene_names, number_of_overlaps, overlapping_genes))[overlapper,]
-colnames(overlapping_gene_list) = c("Gene", "Number_of_gene_overlaps", "Overlapping_genes")
+colnames(overlapping_gene_list) = c("genes", "number_of_gene_overlaps", "overlapping_genes")
 overlapping_gene_list$Number_of_gene_overlaps = as.integer(overlapping_gene_list$Number_of_gene_overlaps)
 
 o = order(overlapping_gene_list$Number_of_gene_overlaps, decreasing = TRUE) # Rank order genes by the number of gene overlaps
@@ -80,7 +88,347 @@ write.csv(overlapping_gene_list, "overlapping_gene_list.csv")
 #### A2: Prioritize gene list by classifying overlapping into recommended action categories ####
 ################################################################################################
 
-# Optional: R-implementation coming shortly (current version in Python 3)
+# Packages to import
+library("rtracklayer")
+library("stringr")
+
+# Import data
+data = read.csv("./overlapping_gene_list.csv", header=T)
+
+# Import genes.gtf file for gene overlap scenario determination
+genes_gtf <- import(con = '<location of the unoptimized genome annotation>/genes.gtf', format = "gtf") # Import the original exonic genome annotation file
+genes_gtf = as.data.frame(genes_gtf)
+
+# Import overlapping genes list from A1
+data$overlapping_genes <- strsplit(data$overlapping_genes, ", ") 
+
+# FUNCTIONS
+return_exons <- function(gene_name){
+  exon_subset <- subset(gene_name, type == 'exon')
+  return(data.frame(exon_subset['start'], exon_subset['end']))
+}
+
+both_pseudo <- function(key, overlapping){
+  return((str_sub(key, 1, 2) == 'Gm' | str_sub(key, - 3, - 1) == 'Rik') & (str_sub(overlapping, 1, 2) == 'Gm' | str_sub(overlapping, - 3, - 1) == 'Rik'))
+}
+
+exon_overlap <- function(gene_A_exons, gene_B_exons){
+  for(row_exonA in 1:nrow(gene_A_exons)){
+    for(row_exonB in 1:nrow(gene_B_exons)){ 
+      x = seq(from = gene_A_exons[row_exonA,1], to = gene_A_exons[row_exonA,2]-1, by = 1)
+      y = seq(from = gene_B_exons[row_exonB,1], to = gene_B_exons[row_exonB,2]-1, by = 1)
+      
+      if(length(intersect(x,y))!=0){
+        return (TRUE)
+      }
+    }
+  }
+  return (FALSE)
+}
+
+pseudo_overlap <- function(key, overlapping, gene_A_exons, gene_B_exons){
+  # Check for exon overlap
+  if(str_sub(key, 1, 2) == 'Gm' | str_sub(key, - 3, - 1) == 'Rik' | str_sub(overlapping, 1, 2) == 'Gm' | str_sub(overlapping, - 3, - 1) == 'Rik'){
+    if(exon_overlap(gene_A_exons, gene_B_exons) == TRUE){
+      # Check if gene_A is a pseudogene
+      if(str_sub(key, 1, 2) == 'Gm' | str_sub(key, - 3, - 1) == 'Rik'){
+        return(key)
+      }
+      else{
+        return(overlapping)
+      }
+    }
+    else{
+      return('exonic')
+    }
+  }
+  
+  else{
+    return('empty')
+  }
+}
+
+readthrough_or_premature <- function(upstream_name, downstream_name, upstream_trx, downstream_trx){
+  max_u = 0
+  for(trx_u in 1:length(upstream_trx[[1]])){
+    count_u = 0
+    for (trx_d in 1:length(downstream_trx[[1]])){
+      x = seq(downstream_trx[[1]][trx_d], downstream_trx[[2]][trx_d]-1)
+      y = seq(upstream_trx[[1]][trx_u], upstream_trx[[2]][trx_u]-1)
+      
+      if(length(intersect(x,y)) > 0){
+        count_u = count_u + 1
+      }
+      
+      if(count_u > max_u){
+        max_u = count_u
+      }
+    }
+  }
+  
+  max_d = 0
+  for(trx_d in 1:length(downstream_trx[[1]])){
+    count_d = 0
+    for(trx_u in 1:length(upstream_trx[[1]])){
+      x = seq(downstream_trx[[1]][trx_d], downstream_trx[[2]][trx_d]-1)
+      y = seq(upstream_trx[[1]][trx_u], upstream_trx[[2]][trx_u]-1)
+      if(length(intersect(x,y)) > 0){
+        count_d = count_d + 1
+      }
+    }
+    if(count_d > max_d){
+      max_d = count_d
+    }
+  }
+  
+  if(max_u > max_d){
+    result <- list(upstream_name, downstream_name, "readthrough")
+    return(result)
+  }
+  else if(max_d > max_u){
+    result <- list(upstream_name, downstream_name, "premature")
+    return(result)
+  }
+  else if(min(length(upstream_trx), length(downstream_trx)) == 1 & max(length(upstream_trx), length(downstream_trx)) != 1){
+    print("MAX & MIN")
+    result <- list(upstream_name, downstream_name, "manual")
+    return(result)
+  }
+  else if(max_u == 1 & max_d == 1){
+    result <- list(upstream_name, downstream_name, "manual")
+    return(result)
+  }
+  else if(max_u == max_d){
+    if(length(upstream_trx[[1]]) > length(downstream_trx[[1]])){
+      result <- list(upstream_name, downstream_name, "readthrough")
+      return(result)
+    }
+    else{
+      result <- list(upstream_name, downstream_name, "premature")
+      return(result)
+    }
+  }
+  else{
+    result <- list(upstream_name, downstream_name, "manual")
+    return(result)
+  }
+}
+
+readthrough_or_premature_plus <- function(name_A, gene_A, name_B, gene_B, gene_A_exons, gene_B_exons){
+  select_gene_A <- gene_A[gene_A$type=='gene', ]
+  gene_A_start <-  min(select_gene_A[,'start'])
+  gene_A_end <- max(select_gene_A[,'end'])
+  select_gene_B <- gene_B[gene_B$type=='gene', ]
+  gene_B_start <-  min(select_gene_B[,'start'])
+  gene_B_end <- max(select_gene_B[,'end'])
+  
+  if(gene_A_start < gene_B_start){
+    upstream_name <- name_A
+    upstream <- gene_A
+    downstream_name <- name_B
+    downstream <- gene_B
+  }
+  
+  else if(gene_B_start < gene_A_start){
+    upstream_name <- name_B
+    upstream <- gene_B
+    downstream_name <- name_A
+    downstream <- gene_A
+  }
+  
+  else if(gene_A_end < gene_B_end){
+    upstream_name <- name_A
+    upstream <- gene_A
+    downstream_name <- name_B
+    downstream <- gene_B
+  }
+  
+  else{
+    upstream_name <- name_B
+    upstream <- gene_B
+    downstream_name <- name_A
+    downstream <- gene_A
+  }
+  
+  upstream_trx <- list(upstream[upstream$type == 'transcript',][,'start'], upstream[upstream$type == 'transcript',][,'end'])
+  downstream_trx = list(downstream[downstream$type == 'transcript',][,'start'], downstream[downstream$type == 'transcript',][,'end'])
+  
+  return(readthrough_or_premature(upstream_name, downstream_name, upstream_trx, downstream_trx))
+}
+
+readthrough_or_premature_min <- function(name_A, gene_A, name_B, gene_B, gene_A_exons, gene_B_exons){
+  select_gene_A <- gene_A[gene_A$type=='gene', ]
+  gene_A_start <-  min(select_gene_A[,'start'])
+  gene_A_end <- max(select_gene_A[,'end'])
+  select_gene_B <- gene_B[gene_B$type=='gene', ]
+  gene_B_start <-  min(select_gene_B[,'start'])
+  gene_B_end <- max(select_gene_B[,'end'])
+  
+  if(gene_B_end > gene_A_end){
+    upstream_name <- name_B
+    upstream <- gene_B
+    downstream_name <- name_A
+    downstream <- gene_A
+  }
+  
+  else if(gene_A_end > gene_B_end){
+    upstream_name <- name_A
+    upstream <- gene_A
+    downstream_name <- name_B
+    downstream <- gene_B
+  }
+  
+  else if(gene_B_start > gene_A_start){
+    upstream_name <- name_B
+    upstream <- gene_B
+    downstream_name <- name_A
+    downstream <- gene_A
+  }
+  
+  else{
+    upstream_name <- name_A
+    upstream <- gene_A
+    downstream_name <- name_B
+    downstream <- gene_B
+  }
+  
+  upstream_trx <- list(upstream[upstream$type == 'transcript',][,'start'], upstream[upstream$type == 'transcript',][,'end'])
+  downstream_trx = list(downstream[downstream$type == 'transcript',][,'start'], downstream[downstream$type == 'transcript',][,'end'])
+  
+  return(readthrough_or_premature(upstream_name, downstream_name, upstream_trx, downstream_trx))
+}
+
+# CLASSIFICATION
+for(key in (rownames(data))){
+  
+  # Check that the gene is not classified already
+  if(is.na(data[key,'automatic_classification'])){
+    gene_A <- subset(genes_gtf, gene_name == key)
+    
+    if(data[key,'number_of_gene_overlaps'] > 1){
+      overlaps <- data[key,'overlapping_genes']
+      for(item in overlaps[[1]]){
+        gene_B = genes_gtf[genes_gtf['gene_name'] == item,]
+        
+        gene_A_exons = return_exons(gene_A)
+        gene_B_exons = return_exons(gene_B)
+        
+        if(exon_overlap(gene_A_exons, gene_B_exons) == TRUE){
+          data[item, 'automatic_classification'] = 'Manual inspection'
+          
+          if(is.na(data[key,'automatic_classification']) | data[key,'automatic_classification'] != 'Manual inspection'){
+            data[key,'automatic_classification'] = 'Manual inspection'
+          }
+        }
+        else{
+          if(is.na(data[key,'automatic_classification'])){
+            data[key,'automatic_classification'] = 'Keep as is'
+            
+            if(data[item,'number_of_gene_overlaps'] > 1){
+              data[item,'automatic_classification'] = 'Manual inspection'
+            }
+            else{
+              data[item,'automatic_classification'] = 'Keep as is'
+            }
+          }
+        }
+      } 
+    }
+    
+    if(data[key,'number_of_gene_overlaps'] == 1){
+      overlapping <- data[key,'overlapping_genes'][[1]]
+      gene_B <- subset(genes_gtf, gene_name == overlapping)
+      strand <- gene_A[1,'strand']
+      
+      gene_A_exons = return_exons(gene_A)
+      gene_B_exons = return_exons(gene_B)
+      
+      # Check if both - key and overlapping gene - are pseudogenes
+      if(both_pseudo(key, overlapping) == TRUE){
+        data[key, 'automatic_classification'] = 'Manual inspection'
+        data[overlapping[[1]], 'automatic_classification'] = 'Manual inspection' 
+      }
+      
+      #  Check for pseudogene
+      else if(pseudo_overlap(key, overlapping, gene_A_exons, gene_B_exons) == key){
+        data[key, 'automatic_classification'] = 'Delete'
+        data[overlapping[[1]], 'automatic_classification'] = 'Keep as is'
+      }
+      
+      else if(pseudo_overlap(key, overlapping, gene_A_exons, gene_B_exons) == overlapping){
+        data[key, 'automatic_classification'] = 'Keep as is' 
+        data[overlapping[[1]], 'automatic_classification'] = 'Delete'
+      }
+      
+      else if(pseudo_overlap(key, overlapping, gene_A_exons, gene_B_exons) == 'exonic'){
+        data[key, 'automatic_classification'] = 'Keep as is'
+        data[overlapping[[1]], 'automatic_classification'] = 'Keep as is' 
+      }
+      
+      # Check for readthrough
+      else if(exon_overlap(gene_A_exons, gene_B_exons) == TRUE){
+        if(strand == '+'){
+          name_A = key
+          name_B = overlapping
+          result = readthrough_or_premature_plus(name_A, gene_A, name_B, gene_B, gene_A_exons, gene_B_exons)
+          
+          if(result[[3]] == 'readthrough'){
+            data[result[[1]],'automatic_classification'] = 'Readthrough transcript deletion'
+            data[result[[2]],'automatic_classification'] = 'Keep as is' 
+          }
+          else if(result[[3]] == 'premature'){
+            data[result[[1]],'automatic_classification'] = 'Keep as is'
+            data[result[[2]],'automatic_classification'] = 'Premature transcript deletion' 
+          }
+          else if(result[[3]] == 'manual'){
+            data[result[[1]],'automatic_classification'] = 'Manual inspection' 
+            data[result[[2]],'automatic_classification'] = 'Manual inspection'
+          }
+        }
+        
+        else if(strand == '-'){
+          name_A = key
+          name_B = overlapping
+          result = readthrough_or_premature_min(name_A, gene_A, name_B, gene_B, gene_A_exons, gene_B_exons)
+          
+          if(result[[3]] == 'readthrough'){
+            data[result[[1]],'automatic_classification'] = 'Readthrough transcript deletion'
+            data[result[[2]],'automatic_classification'] = 'Keep as is' 
+          }
+          else if(result[[3]] == 'premature'){
+            data[result[[1]],'automatic_classification'] = 'Keep as is'
+            data[result[[2]],'automatic_classification'] = 'Premature transcript deletion'
+          }
+          else if(result[[3]] == 'manual'){
+            data[result[[1]],'automatic_classification'] = 'Manual inspection' 
+            data[result[[2]],'automatic_classification'] = 'Manual inspection'
+          }
+        }
+      }
+      
+      else if(exon_overlap(gene_A_exons, gene_B_exons) == FALSE){
+        data[key,'automatic_classification'] = 'Keep as is' 
+        data[overlapping,'automatic_classification'] = 'Keep as is'
+      }
+    }    
+  }
+}
+
+# Convert data$overlapping_genes from list to string
+string_overlapping = rep("", length(data$overlapping_genes))
+
+for (i in 1:length(data$overlapping_genes)){
+  a = unlist(data$overlapping_genes[i])
+  a = paste(a, collapse = " ")
+  string_overlapping[i] = a
+}
+
+data$overlapping_genes = string_overlapping
+
+
+# SAVE DATA
+write.csv(data,"./overlapping_gene_list.csv")
+
 
 #### A3: Manually curate gene overlap list ####
 ###############################################
@@ -93,12 +441,17 @@ write.csv(overlapping_gene_list, "overlapping_gene_list.csv")
 # that obscure protein coding genes, examine evidence for its existence (are they reported
 # by other annotation consortia - e.g. Refseq). You can also examine if any reads map to it
 # with regular exonic reference and determine whether to keep or eliminate it from the annotation.
-# To mark gene for deletion, mark its status as "delete" under column "final_classification"
+# To mark gene for deletion, mark its status as "Delete" under column "final_classification"
 # in the overlapping_gene_list.csv.
 
 
+# For genes that cannot be unentangled due to overlap of terminal exons, delete one of them and rename the other to reflect that reads
+# could orignate from both. To this end, mark one of the genes for deletion (add "Delete" under "overlapping_gene_list.csv" file $final_classification)
+# field. Also, create a new csv file "rename_genes.csv" where under column "old_names" you can list gene names that need to be renamed and under
+# column "new_names" list the new hybrid gene name. See https://github.com/PoolLab/generecovery/tree/main/mouse_mm10_input_files for formating example.
+
 ################################################################
-#### B. Recover intergenic reads from 3’ un-annotated exons ####
+#### B. Recover intergenic reads from 3' un-annotated exons ####
 ################################################################
 
 
@@ -117,7 +470,7 @@ library("IRanges")
 # 3. Optional: Refseq genome annotation for rapid extension of 3' gene ends in the 10x Genomics/Ensembl genome annotation. Can be accessed from UCSC genome browser: http://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/ for mice and https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/ where I downloaded hg38.ncbiRefSeq.gtf.gz for humans
 
 ## Outputs:
-# A. Gene_3'_intergenic_read_summary
+# A. gene_extension_candidates.csv
 
 ## Steps:
 # B1: Isolate intergenic sequencing reads
@@ -165,7 +518,7 @@ gr_seq_data = makeGRangesFromDataFrame(seq_data) # coerce to granges object as t
 
 ga_seq_data = as(gr_seq_data, "GAlignments") # Coerces GRanges object into a GAlignments object, that can be saved as a bed file. Required for bedtools to link reads to closest 3' gene end.
 m = asBED(ga_seq_data)# converts GAlignments object into the bed format
-export.bed(m, con = "<save_location>/intergenic_reads.bed")
+export.bed(m, con = "./intergenic_reads.bed")
 
 
 #### B2: Create gene ranges file for linking reads to genes (note: partially in BASH/Terminal) ####
@@ -360,8 +713,6 @@ for (i in ref_seq_genes){
 
 write.csv(summary_data_genes, "gene_extension_candidates.csv") # Final decision file for gene extension curation
 
-
-
 #### B5: Manual curation of candidate genes for 3' gene extension ####
 ######################################################################
 
@@ -373,38 +724,4 @@ write.csv(summary_data_genes, "gene_extension_candidates.csv") # Final decision 
 #  c) examine external evidence (e.g. Allen in situ brain atlas, Human Protein Atlas etc.)
 
 # Based on the latter, provide new gene boundaries under two new columns: "update_start" and "update_end" depending on whether gene is on "-" or "+" strands, respectively. Use excel formulas, if necessary, to scale curation, and save file as "gene_extension_candidates.xlsx".
-# Resulting manually curated "gene_extension_candidates.xlsx" will be used as input in the Optimized annotation assembly stage.
-
-###################################
-#### C. Recover intronic reads ####
-###################################
-
-# Note: several methods are available for recovering intronic reads from scRNA-seq data. These
-# include the traditional approach of redefining all genes/transcripts as exons, which enables
-# incorporation of intronic reads to downstream analysis. This approach works well but has
-# several problems including poorer performance at mapping spliced reads (annotation loses
-# splicing boundaries) and eliminates hundreds of genes due to gene overlaps. There are also
-# specific modes in the latest versions of sequence aligners (e.g. --include-introns parameter
-# in Cell Ranger) for incorporating intronic reads that should work better. However, we found
-# that the latter systematically fails to retrieve intronic reads for many genes that the
-# traditional premrna approach performs well on. We therefore adopted a hybrid pre-mRNA
-# reference approach where we supplement normal gene annotation entries by traditional
-# pre-mRNA entries where transcripts have been redefined as exons and map in the
-# --include-introns mode to retrieve most of available intronic reads.
-
-
-# Input: original genome annotation file (.gtf)
-# Output: pre-mRNA genome annotation (.gtf), which contains transcripts redefined as exons. This is used as input in the final optimized genome annotation assembly.
-
-#### Generate a basic pre-mRNA reference (define transcripts as exons).
-
-library("rtracklayer")
-
-exonic_df<- import(con = '<location_of_genome_annotation>/name.gtf', format = "gtf") # Import the original exonic genome annotation file
-exonic_df = as.data.frame(exonic_df)
-premrna_df = exonic_df[exonic_df$type == "transcript",] # Extract all "transcript" entries in the genome annotation to a new variable
-premrna_df$feature = rep("exon", nrow(premrna_df)) # Rename all "feature" 
-
-premrna_df = makeGRangesFromDataFrame(premrna_df, keep.extra.columns=TRUE)
-rtracklayer::export(premrna_df, "premrna.gtf", format = "gtf")
-
+# Resulting manually curated "gene_extension_candidates.csv" will be used as input in the Optimized annotation assembly stage.
