@@ -48,8 +48,22 @@ new_df = exonic_df
 rm(exonic_df)
 rm(exonic_gtf)
 
-####  1. Create premRNA genome annotation from input gtf ####
-#############################################################
+####  1. Create premRNA genome annotation from input gtf that defines transcripts as exons ####
+###############################################################################################
+
+# Note: several methods are available for recovering intronic reads from scRNA-seq data. These
+# include the early approach of redefining all genes/transcripts as exons, which enables
+# incorporation of intronic reads to downstream analysis. This approach works well but has
+# several problems including poorer performance at mapping spliced reads (annotation loses
+# splicing boundaries) and eliminates hundreds of genes due to gene overlaps. There are also
+# specific modes in the latest versions of sequence aligners (e.g. --include-introns parameter
+# in Cell Ranger 6) for incorporating intronic reads that work better. However, we found
+# that the latter systematically fails to retrieve intronic reads for many genes that the
+# traditional premrna approach performs well on. We therefore adopted a hybrid pre-mRNA
+# reference approach where we supplement normal gene annotation entries by traditional
+# pre-mRNA entries where transcripts have been redefined as exons and map in the
+# --include-introns mode in Cell Ranger 6 or default mode in later ierations to retrieve 
+# most of available intronic reads.
 
 transcripts_df = exonic_df[exonic_df$type == "transcript",]
 exons_df = transcripts_df # Create new dataframe to contain premrna exons
