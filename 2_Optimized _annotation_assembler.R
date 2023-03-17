@@ -15,8 +15,8 @@
 # 2. Gene deletion step: Deletes all annotation entries for genes destined for deletion (has "Delete" entry in $final_classification field of "overlapping_gene_list.csv"
 # 3. Transcript deletion step: Deletes all transcripts destined for deletion (transcript names listed in the "transcripts_for_deletion" column in ""overlapping_gene_list.csv"
 # 4. Gene coordinate adjustment step: replace the left most or right most coordinate of the first exon of a gene in genome annotation if there is a coordinate in columns $new_left or $new_right in the "gene_extension_candidates.csv".
-# 4. Add pre-mRNA reads to all genes not in the gene overlap list.
-# 5. Rename genes to avoid discarding expression data with near perfect terminal exon overlap.
+# 5. Add pre-mRNA reads to all genes not in the gene overlap list.
+# 6. Rename genes to avoid discarding expression data with near perfect terminal exon overlap.
 # 7. Save the optimized genome annotation in a new gtf file
 
 
