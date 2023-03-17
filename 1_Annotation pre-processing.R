@@ -12,20 +12,25 @@
 # following three aspects of genome annotations need to be optimized:
 # A) Resolving gene overlap derived read loss;
 # B) Recovering intergenic reads from 3' un-annotated exons; and
-# C) Recovering intronic reads.
+# C) Optimally recovering intronic reads.
 
 # After optimizing and assembling the genome annotation, you can use "cellranger mkref"
-# pipeline to assemble the optimized transcriptomic reference for mapping sequencing read
-# data and compiling gene-cell matrices with the "cellranger count" (or other) pipeline.
+# pipeline to assemble the optimized transcriptomic reference. The latter can be used  for
+# mapping sequencing read data and compiling gene-cell matrices with the "cellranger count"
+# (or other) pipeline.
 
 # Purpose: this script generates the input data for automated genome annotation assembly
 # ("2_Optimized_annotation_assembler.R").
 
 # Required input data:
 # 1. Genome annotation file ("xxx.gtf" file, from 10x Genomics provided reference transcriptome "gene" folder: can be downloaded at "https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest" or Ensembl.org if wish to customize more)
-# 2. Cell Ranger aligned scRNA-seq sequencing data (.bam file)
+# 2. Cell Ranger aligned scRNA-seq sequencing data (.bam file). This is required to identify genes with excessive 3' intergenic reads that may indicate the presence of an unannotated 3' exon.
 # 3. Optional: Refseq genome annotation for rapid extension of 3' gene ends in the 10x Genomics/Ensembl genome annotation. Can be accessed from UCSC genome browser: http://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/ for mice and https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/ where I downloaded hg38.ncbiRefSeq.gtf.gz for humans.
 
+# Required software: This code relies on two software packages that are only available for linux/mac OS paltforms. Therefore it is highly advisable you run this analysis
+# on a linux or mac OS machine.
+# 1. BEDOPS: available for install at https://bedops.readthedocs.io/en/latest/content/installation.html 
+# 2. Bedtools: available for install at https://bedtools.readthedocs.io/en/latest/content/installation.html
 
 ###################################################
 #### A. Resolve gene overlap derived read loss ####
@@ -53,7 +58,7 @@ library("GenomicRanges")
 library("stringr")
 
 
-exonic_df<- import(con = '<location of the unoptimized genome annotation>/genes.gtf', format = "gtf") # Import the original exonic genome annotation file
+exonic_df<- import(con = '<location of unoptimized genome annotation>/genes.gtf', format = "gtf") # Import the original exonic genome annotation file
 exonic_df = as.data.frame(exonic_df)
 genes_df = exonic_df[exonic_df$type == "gene",1:13] # Extract all "gene" entries in the genome annotation to a new variable
 row.names(genes_df) = 1:nrow(genes_df)
@@ -77,16 +82,24 @@ for (i in 1:length(gene_names)){
 
 overlapping_gene_list = as.data.frame(cbind(gene_names, number_of_overlaps, overlapping_genes))[overlapper,]
 colnames(overlapping_gene_list) = c("genes", "number_of_gene_overlaps", "overlapping_genes")
-overlapping_gene_list$Number_of_gene_overlaps = as.integer(overlapping_gene_list$Number_of_gene_overlaps)
+overlapping_gene_list$number_of_gene_overlaps = as.integer(overlapping_gene_list$number_of_gene_overlaps)
 
-o = order(overlapping_gene_list$Number_of_gene_overlaps, decreasing = TRUE) # Rank order genes by the number of gene overlaps
+o = order(overlapping_gene_list$number_of_gene_overlaps, decreasing = TRUE) # Rank order genes by the number of gene overlaps
 overlapping_gene_list = overlapping_gene_list[o,]
 row.names(overlapping_gene_list) = 1:nrow(overlapping_gene_list)
 
+final_classification = rep("", nrow(overlapping_gene_list))
+transcripts_for_deletion = rep("", nrow(overlapping_gene_list))
+comments = rep("", nrow(overlapping_gene_list))
+
+overlapping_gene_list = cbind(overlapping_gene_list, final_classification, transcripts_for_deletion, comments)
+
+head(overlapping_gene_list)
+
 write.csv(overlapping_gene_list, "overlapping_gene_list.csv")
 
-#### A2: Prioritize gene list by classifying overlapping into recommended action categories ####
-################################################################################################
+#### A2 (OPTIONAL): Prioritize gene list by classifying overlapping into recommended action categories ####
+###########################################################################################################
 
 # Packages to import
 library("rtracklayer")
@@ -490,8 +503,8 @@ library("IRanges")
 
 ## Load sequencing data from transcriptome aligned .bam file (note, needs to be aligned with Cell Ranger!).
 
-bamfile = file.path("<file_location>/possorted_genome_bam.bam")
-indexfile = file.path("<file_location>/possorted_genome_bam.bam") #Note, you don't have to specify ".bai" extension here.
+bamfile = file.path("<location of Cell Ranger generated bam file with aligned sequencing reads>/possorted_genome_bam.bam") # Add the location of the Cell Ranger generated bam file containing transcriptome aligned reads with the unoptimized reference
+indexfile = file.path("<location of Cell Ranger generated bam file with aligned sequencing reads>/possorted_genome_bam.bam") #Note, you don't have to specify ".bai" extension here.
 seq_data = readGAlignments(bamfile, index=indexfile, param = ScanBamParam(flag = scanBamFlag(isDuplicate = FALSE, isSecondaryAlignment = FALSE), tag = c("GN", "RE", "CB", "UB", "AN"), what = "flag", tagFilter = list("RE"=c("I", "E")))) # Extract all non-duplicate intergenic and exonic sequening reads with the following bam tags: "GN" - aligned gene; "RE" - read classification into E-exonic, N-intronic, I-intergenic; "CB" - corrected cellular barcode; "UB" - corrected UMI/molecular barcode, "AN" - antisense gene.
 seq_data = data.frame(seq_data)
 
@@ -521,31 +534,35 @@ m = asBED(ga_seq_data)# converts GAlignments object into the bed format
 export.bed(m, con = "./intergenic_reads.bed")
 
 
-#### B2: Create gene ranges file for linking reads to genes (note: partially in BASH/Terminal) ####
-###################################################################################################
+#### B2: Create gene ranges file for linking reads to genes ####
+################################################################
 
-#### Purpose: Make a bed file with gene boundaries, which is required for assigning intergenic reads to a specific gene. This step is in bash with one step in R.
+#### Purpose: Make a bed file with gene boundaries, which is required for assigning intergenic reads to a specific gene. This step requires R to be able to access a linux terminal and a software package that is only available on linux / mac OS.
 
 #### Input: Genome annotation file ("xxx.gtf" file, from 10x Genomics provided reference transcriptome "gene" folder: can be downloaded at "https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest" or Ensembl.org if wish to customize more)
 
 #### Notes:
-# Part of this step should be run in linux Terminal in Bash.
-# This step requires bedtools: https://bedtools.readthedocs.io/en/latest/content/installation.html. Put it in PATH after installing.
+# This step requires BEDOPS (https://bedops.readthedocs.io/en/latest/index.html) which is only available for linux based environments. which is only available for linux environments.
+# We will invoke the bash scripts from R for which you need to have BEDOPS installed on your linux/mac OS system.
+# Alternatively, one can run the BEDOPS and relevant bash scripts straight from a linux terminal if desired. In this case, make sure BEDOPS is set in PATH.
 
 
-## In bash/linux terminal: Create bed file with gene boundaries from the gene annotation ("xxx.gtf") file (perform in linux Terminal in bash!)
+# Extract all gene entries from genome annotation. Assuming that input unoptimzied genome reference is named "genes.gtf" per 10x Genomics convention.
 
-# In linux terminal, navigate to folder with the genome annotation of interest. Assuming that it is named "genes.gtf" per 10x Genomics convention.
+gene_ranges_df<- import(con = "./genes.gtf", format = "gtf") # Import the original unoptimized genome annotation file
+gene_ranges_df = as.data.frame(gene_ranges_df)
+gene_ranges_df = gene_ranges_df[gene_ranges_df$type == "gene",] # Extract all "gene" entries in the genome annotation to a new variable
+gene_ranges_df = makeGRangesFromDataFrame(gene_ranges_df, keep.extra.columns=TRUE)
+rtracklayer::export(gene_ranges_df, "gene_ranges.gtf", format = "gtf")
 
-grep -P '\tgene\t' genes.gtf > gene_ranges.gtf # extracts all "gene" entries from genome annotation and saves to a new file 
+## Add "transcript_id """ column to the gtf file to make it compatible with BEDOPS expectation of bed format
 
-## In bash/linux terminal: Add "transcript_id """ column to the gtf file to make it compatible with bedtools format
-awk '{ if ($0 ~ "transcript_id") print $0; else print $0" transcript_id \"\";"; }' gene_ranges.gtf > gene_ranges1.gtf # can discard the original, can discard
-rm gene_ranges.gtf # removes intermediate file
+system('awk \'{ if ($0 ~ "transcript_id") print $0; else print $0" transcript_id \"\";"; }\' gene_ranges.gtf > gene_ranges1.gtf')
 
-## In bash: Convert reference gtf into bed with bedtools
-export PATH=<path_to_bedtools_bin_folder>:$PATH  # Include bedtools location to path.
-gtf2bed < gene_ranges1.gtf > gene_ranges.bed # Creates a bed file with gene boundaries
+## Convert reference gtf into bed with BEDOPS command gtf2bed. Note, that R needs to have access to linux terminal and uses BEDOPS software that is only available for linux / mac OS.
+old_path <- Sys.getenv("PATH")
+Sys.setenv(PATH = paste(old_path, "/usr/bin/bedops", sep = ":")) # modify BEDOPS location folder if different
+system("gtf2bed < gene_ranges1.gtf > gene_ranges.bed") # Creates a bed file with gene boundaries
 
 ## In R: Replace final column with gene name. Make sure you navigate to same folder in R.
 
@@ -563,21 +580,22 @@ for (i in 1:dim(gene_ranges)[1])
 ## In R: save outcome
 write.table(gene_ranges, "gene_ranges.bed", sep="\t",row.names=FALSE, col.names=FALSE, quote = FALSE)
 
-
 #### B3: Identify candidate genes for extension with excess 3' intergenic reads ####
 ####################################################################################
 
-## In bash/linux terminal: Make sure bedtools is in PATH.
+# Sort bed files
+system("sort -k 1,1 -k2,2n gene_ranges.bed > gene_ranges_sorted.bed")
+system("sort -k 1,1 -k2,2n intergenic_reads.bed > intergenic_reads_sorted.bed")
 
-export PATH=<location of bedtools bin folder>:$PATH # Places bedtools in path.
+## This step requires bedtools (https://bedtools.readthedocs.io/en/latest/content/installation.html) which is only available for linux environments. We will invoke the bash scripts from R for which you need to have bedtools installed on your linux/mac system.
+# Alternatively, one can run the bedtools commands and relevant bash scripts straight from a linux terminal. In this case, make sure bedtools is set in PATH.
 
-sortBed -i intergenic_reads.bed > intergenic_reads1.bed # sort intergenic reads file
-sortBed -i gene_ranges.bed > gene_ranges1.bed  # sort gene ranges file
+old_path <- Sys.getenv("PATH")
+Sys.setenv(PATH = paste(old_path, "/opt/bedtools2/bin", sep = ":")) # Add bedtools to PATH. Modify bedtools location folder if different
 
-bedtools closest -a intergenic_reads1.bed -b gene_ranges1.bed -s -D a -fu > results.txt # resulting file contains sequencing reads with distance data from closest 3' gene identity and end
+system("bedtools closest -a intergenic_reads_sorted.bed -b gene_ranges_sorted.bed -s -D a -fu > results.txt") # resulting file contains sequencing reads with distance data from closest 3' gene identity and end
 
 ## In R: Save a rank ordered list of genes with highest-to-lowest number of intergenic reads within 10kb of its known gene end.
-
 summary_data = read.table("results.txt", sep = "\t")
 
 summary_data = summary_data[summary_data$V23>-10000,] # retain only sequencing reads within 10kb of known gene ends. Change to more or less stringent as desired.
@@ -594,23 +612,24 @@ summary_data_genes = data.frame(summary_data_genes)
 dim(summary_data_genes)
 summary_data_genes[1:40,]
 
+colnames(summary_data_genes) =  c("genes", "3primcount")
 write.csv(summary_data_genes, "gene_extension_candidates.csv") # Saves a rank ordered list of genes as a function of 3' intergenic read mapping within 10kb of known gene end. You can use this as a prioritized gene list for gene extension to examine in Integrated Genomics Viewer.
 
 summary_data_genes["<gene_of_interest"] # display 3' intergenic read mapping for a gene of interest
 
 
 
-#### B4: Add Ensembl/10x Genomics and Refseq 3' gene ends to gene extension decision file ####
+#### B4: Add Ensembl 3' gene ends to gene extension decision file ####
 ##############################################################################################
 
 #### Acquire ensembl gene boundaries from 10x Genomics/Ensembl genome annotation. The genome annotations can be acquired from 10x Genomics provided reference transcriptome "gene" folder: can be downloaded at "https://support.10xgenomics.com/single-cell-gene-expression/software/downloads/latest"
 
-ensembl_db <- import(con ="<location of genome annotation>/genes.gtf", format = "gtf")
+ensembl_db <- import(con ="./genes.gtf", format = "gtf")
 
 ensembl_db = as.data.frame(ensembl_db)
 ensembl_db = ensembl_db[,c(13,2,3,5,7)] # Extract relevant information from genome annotation (gene, start, end, strand and feature)
-colnames(ensembl_db) = c("gene", "start", "end", "strand", "feature")
-ensembl_db = ensembl_db[ensembl_db$feature == "gene",] # Keep only "gene" features from the annotation 
+colnames(ensembl_db) = c("gene", "start", "end", "strand", "type")
+ensembl_db = ensembl_db[ensembl_db$type == "gene",] # Keep only "gene" features from the annotation 
 head(ensembl_db)
 dim(ensembl_db)
 
@@ -620,11 +639,11 @@ ensembl_duplicates=unique(ensembl_db$gene[duplicated(ensembl_db$gene)])
 start = rep(0, length(ensembl_duplicates))
 end = rep(0, length(ensembl_duplicates))
 strand = as.factor(rep(c("+", "-"), length(ensembl_duplicates)/2))
-feature = rep("gene", length(ensembl_duplicates))
+type = rep("gene", length(ensembl_duplicates))
 
-ensembl_fix = data.frame(cbind(ensembl_duplicates, start, end, strand, feature))
+ensembl_fix = data.frame(cbind(ensembl_duplicates, start, end, strand, type))
 ensembl_fix$strand = strand
-colnames(ensembl_fix) = c("gene", "start", "end", "strand", "feature")
+colnames(ensembl_fix) = c("gene", "start", "end", "strand", "type")
 row.names(ensembl_fix) = ensembl_fix$gene
 
 for (i in 1:length(ensembl_duplicates)){
@@ -640,20 +659,18 @@ ensembl_db = ensembl_db[!(ensembl_db$gene %in% ensembl_duplicates), ] # kick out
 ensembl_db = rbind(ensembl_db, ensembl_fix)
 ensembl_db = data.frame(ensembl_db[,-1], row.names = ensembl_db[,1])
 
-
-
-#### Get Refseq gene boundaries (for many genes Refseq has annotated 3' gene boundaries to extend significantly further than in the Ensembl/Gencode references. This allows for rapid extension of hundreds of genes). Refseq genome annotations can be accessed from UCSC genome browser: http://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/ for mice and https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/ where you can download hg38.ncbiRefSeq.gtf.gz for humans.
+#### OPTIONAL: Get Refseq gene boundaries (for many genes Refseq has annotated 3' gene boundaries to extend significantly further than in the Ensembl/Gencode references. This allows for rapid extension of hundreds of genes). Refseq genome annotations can be accessed from UCSC genome browser: http://hgdownload.soe.ucsc.edu/goldenPath/mm10/bigZips/genes/ for mice and https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/genes/ where you can download hg38.ncbiRefSeq.gtf.gz for humans.
 
 refseq_db = import(con ="C:/Users/allan/OneDrive/Desktop/Helen Allan Computational Paper/Data/Refseq_GTFs/mm10.ncbiRefSeq.gtf", format = "gtf")
 refseq_db = as.data.frame(refseq_db)
 refseq_db = refseq_db[,c(12,2,3,5,7)] # Note, these positions can change with successive updates of the format.
-colnames(refseq_db) = c("gene", "start", "end", "strand", "feature")
+colnames(refseq_db) = c("gene", "start", "end", "strand", "type")
 refseq_db = refseq_db[refseq_db$feature == "transcript",]
 dim(refseq_db)
 head(refseq_db)
 
 
-## Deal with gene duplications in refseq genome annotation (similarly to ensembl reference, the Refseq reference somewhat unexpectedly contains several gene entries for some genes)
+#### OPTIONAL: Deal with gene duplications in refseq genome annotation (similarly to ensembl reference, the Refseq reference somewhat unexpectedly contains several gene entries for some genes)
 
 refseq_duplicates=unique(refseq_db$gene[duplicated(refseq_db$gene)])
 start = rep(0, length(refseq_duplicates))
@@ -661,7 +678,7 @@ end = rep(0, length(refseq_duplicates))
 strand = as.factor(rep(c("+", "-"), length(refseq_duplicates)/2))
 feature = rep("gene", length(refseq_duplicates))
 
-refseq_fix = data.frame(cbind(refseq_duplicates, start, end, strand, feature))
+refseq_fix = data.frame(cbind(refseq_duplicates, start, end, strand, type))
 refseq_fix$strand = strand
 colnames(refseq_fix) = c("gene", "start", "end", "strand", "feature")
 row.names(refseq_fix) = refseq_fix$gene
@@ -682,36 +699,45 @@ refseq_db = data.frame(refseq_db[,-1], row.names = refseq_db[,1])
 
 #### Assemble summary file for gene extension curation
 
-strand = as.factor(rep(c("+", "-"), 10000))[1:dim(summary_data_genes)[1]]
-ensembl_start = rep(0, dim(summary_data_genes)[1])
-ensembl_end = rep(0, dim(summary_data_genes)[1])
-refseq_term_left = rep(0, dim(summary_data_genes)[1])
-refseq_term_right = rep(0, dim(summary_data_genes)[1])
-ref_seq_overhang = rep(0, dim(summary_data_genes)[1])
+strand = as.factor(rep(c("+", "-"), 10000))[1:nrow(summary_data_genes)]
+ensembl_start = rep(0, nrow(summary_data_genes))
+ensembl_end = rep(0, nrow(summary_data_genes))
+# refseq_term_left = rep(0, nrow(summary_data_genes))
+# refseq_term_right = rep(0, nrow(summary_data_genes))
+# ref_seq_overhang = rep(0, nrow(summary_data_genes))
+update_start = as.numeric(rep(NA, nrow(summary_data_genes)))
+update_end = as.numeric(rep(NA, nrow(summary_data_genes)))
 
 for (i in 1:dim(summary_data_genes)[1]){
-  gene = row.names(summary_data_genes)[i]
+  gene = summary_data_genes$genes[i]
   ensembl_start[i] = as.numeric(ensembl_db[gene,]$start)
   ensembl_end[i] = as.numeric(ensembl_db[gene,]$end)
   strand[i] = ensembl_db[gene,]$strand
 }
 
-summary_data_genes = data.frame(cbind(summary_data_genes, strand, ensembl_start, ensembl_end, refseq_term_left, refseq_term_right, ref_seq_overhang))
-# summary_data$refseq_term_right = as.numeric(summary_data$refseq_term_right)
+summary_data_genes = data.frame(cbind(summary_data_genes, strand, ensembl_start, ensembl_end, update_start, update_end))
+# summary_data_genes = data.frame(cbind(summary_data_genes, strand, ensembl_start, ensembl_end, refseq_term_left, refseq_term_right, ref_seq_overhang)) # if refseq data is used
 
-ref_seq_genes = intersect(rownames(summary_data_genes), row.names(refseq_db))
 
-for (i in ref_seq_genes){
-  if (summary_data_genes[i,2] == "+"){
-    summary_data_genes[i, 6] = as.numeric(refseq_db[i, 2])
-    summary_data_genes[i, 7] = summary_data_genes[i, 6] - summary_data_genes[i, 4]
-  } else {
-    summary_data_genes[i, 5] = as.numeric(refseq_db[i, 1])
-    summary_data_genes[i, 7] = summary_data_genes[i, 3] - summary_data_genes[i, 5]
-  }
-}
+# ref_seq_genes = intersect(rownames(summary_data_genes), row.names(refseq_db))
+#for (i in ref_seq_genes){
+#  if (summary_data_genes[i,2] == "+"){
+#    summary_data_genes[i, 6] = as.numeric(refseq_db[i, 2])
+#    summary_data_genes[i, 7] = summary_data_genes[i, 6] - summary_data_genes[i, 4]
+#  } else {
+#    summary_data_genes[i, 5] = as.numeric(refseq_db[i, 1])
+#    summary_data_genes[i, 7] = summary_data_genes[i, 3] - summary_data_genes[i, 5]
+#  }
+#}
 
 write.csv(summary_data_genes, "gene_extension_candidates.csv") # Final decision file for gene extension curation
+file.remove("./gene_ranges.bed")
+file.remove("./gene_ranges.gtf")
+file.remove("./gene_ranges1.gtf")
+file.remove("./gene_ranges_sorted.bed")
+file.remove("./intergenic_reads.bed")
+file.remove("./intergenic_reads_sorted.bed")
+file.remove("./results.txt")
 
 #### B5: Manual curation of candidate genes for 3' gene extension ####
 ######################################################################
