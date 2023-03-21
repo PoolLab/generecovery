@@ -45,6 +45,7 @@ rename_genes = read.csv("rename_genes.csv", header=T)
 
 new_df = exonic_df
 
+rm(exonic_df)
 
 ####  1. Create premRNA genome annotation from input gtf that defines transcripts as exons ####
 ###############################################################################################
