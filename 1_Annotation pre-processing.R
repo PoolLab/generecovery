@@ -577,6 +577,9 @@ for (i in 1:dim(gene_ranges)[1])
   gene_ranges[i, 10] = b
 }
 
+file.remove("./gene_ranges.gtf")
+file.remove("./gene_ranges1.gtf")
+
 ## In R: save outcome
 write.table(gene_ranges, "gene_ranges.bed", sep="\t",row.names=FALSE, col.names=FALSE, quote = FALSE)
 
