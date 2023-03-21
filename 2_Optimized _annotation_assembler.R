@@ -69,7 +69,16 @@ exons_df = transcripts_df # Create new dataframe to contain premrna exons
 exons_df$type = rep("exon", nrow(exons_df)) # rename "type" from transcripts to exon
 
 premrna_df = interleave(transcripts_df, exons_df) # interleave transript entries with exon entries
-premrna_df$transcript_id = gsub("0000", "8888", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000000", "100000", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000001", "110001", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000002", "110002", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000003", "110003", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000004", "110004", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000005", "110005", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000006", "110006", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000007", "110007", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000008", "110008", premrna_df$transcript_id)
+premrna_df$transcript_id = gsub("000009", "110009", premrna_df$transcript_id)
 
 ####  2. Delete select genes ####
 #################################
