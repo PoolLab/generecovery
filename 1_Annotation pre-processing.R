@@ -752,5 +752,5 @@ file.remove("./results.txt")
 #  b) continuous read mapping from known gene end (delayed cutoff of sequencing reads posterior from known gene end)
 #  c) examine external evidence (e.g. Allen in situ brain atlas, Human Protein Atlas etc.)
 
-# Based on the latter, provide new gene boundaries under two new columns: "update_start" and "update_end" depending on whether gene is on "-" or "+" strands, respectively. Use excel formulas, if necessary, to scale curation, and save file as "gene_extension_candidates.xlsx".
+# Based on the latter, provide new gene boundaries under two new columns: "update_start" and "update_end" depending on whether gene is on "-" or "+" strands, respectively. Use excel formulas, if necessary, to scale curation, and save file as "gene_extension_candidates.csv".
 # Resulting manually curated "gene_extension_candidates.csv" will be used as input in the Optimized annotation assembly stage.
