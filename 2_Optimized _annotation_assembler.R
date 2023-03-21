@@ -32,7 +32,6 @@ BiocManager::install("GenomicRanges")
 library("rtracklayer")
 library("gdata")
 library("stringr")
-library("rtracklayer")
 library("GenomicRanges")
 
 exonic_gtf<- import(con = 'genes.gtf', format = "gtf")
