@@ -44,7 +44,7 @@ boundary_fix = read.csv("gene_extension_candidates.csv", header=T)
 rename_genes = read.csv("rename_genes.csv", header=T)
 
 new_df = exonic_df
-rm(exonic_gtf)
+
 
 ####  1. Create premRNA genome annotation from input gtf that defines transcripts as exons ####
 ###############################################################################################
@@ -63,7 +63,7 @@ rm(exonic_gtf)
 # --include-introns mode in Cell Ranger 6 or default mode in later ierations to retrieve 
 # most of available intronic reads.
 
-transcripts_df = exonic_df[exonic_df$type == "transcript",]
+transcripts_df = new_df[new_df$type == "transcript",]
 exons_df = transcripts_df # Create new dataframe to contain premrna exons
 exons_df$type = rep("exon", nrow(exons_df)) # rename "type" from transcripts to exon
 
