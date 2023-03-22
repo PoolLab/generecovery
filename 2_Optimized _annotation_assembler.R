@@ -75,7 +75,7 @@ for (i in self_overlappers){
 new_df = exonic_df
 rm(exonic_df)
 
-####  1. Create premRNA genome annotation from input gtf that defines transcripts as exons ####
+####  2. Create premRNA genome annotation from input gtf that defines transcripts as exons ####
 ###############################################################################################
 
 # Note: several methods are available for recovering intronic reads from scRNA-seq data. These
@@ -108,13 +108,13 @@ premrna_df$transcript_id = gsub("000007", "110007", premrna_df$transcript_id)
 premrna_df$transcript_id = gsub("000008", "110008", premrna_df$transcript_id)
 premrna_df$transcript_id = gsub("000009", "110009", premrna_df$transcript_id)
 
-####  2. Delete select genes ####
+####  3. Delete select genes ####
 #################################
 
 genes_to_delete = overlap_df$genes[overlap_df$final_classification == "Delete"]
 new_df = new_df[!new_df$gene_name %in% genes_to_delete,]
 
-####  3. Delete select transcripts ####
+####  4. Delete select transcripts ####
 #######################################
 
 transcripts_to_delete = overlap_df$transcripts_for_deletion
@@ -135,7 +135,7 @@ transcripts_to_delete = transcripts_to_delete_final
 new_df = new_df[!new_df$transcript_name %in% transcripts_to_delete,]
 
 
-####  4. Adjust gene coordinates ####
+####  5. Adjust gene coordinates ####
 #####################################
 
 left_genes = as.data.frame(cbind(boundary_fix$genes[!is.na(boundary_fix$update_start)], boundary_fix$update_start[!is.na(boundary_fix$update_start)]))
@@ -164,7 +164,7 @@ for (i in 1:dim(right_genes)[1]){
   right_exon_difs[i] = new_df[last_gene_exon, 3] - new_df[last_gene_exon, 2]
 }
 
-#### 5. Add pre-mRNA transcripts to genes not in the gene overlap list ####
+#### 6. Add pre-mRNA transcripts to genes not in the gene overlap list ####
 ############################################################################
 
 # Explanation: Cellranger --include-introns mode unfortunately does not pick up on many intronic reads (unclear why despite lengthy correspondence with their support). I can pick those up however if I add the pre-mRNA transcripts to respective genes as exons with new transcript_id values.
@@ -191,7 +191,7 @@ for (i in genes_to_append){
   new_df = rbind(first_section, insert, last_section)
 }
 
-#### 6. Rename desired genes ####
+#### 7. Rename desired genes ####
 #################################
 
 # Rename desired genes (example from mouse genome): "Cers1"==>"Cers1_Gdf1" // "Chtf8" ==> "Chtf8_Derpc" // "Insl3" ==> "Insl3_Jak3" // "Pcdhga1" ==> "Pcdhg_all" // "Pcdha1" ==> "Pcdha_all" // "Ugt1a10" ==> "Ugt1a_all" // "4933427D14Rik" ==> "4933427D14Rik_Gm43951" // "Mkks" ==> "Mkks_plus"
@@ -211,7 +211,7 @@ sum(str_detect(new_df$transcript_name[!is.na(new_df$transcript_name)], "Cers1"))
 sum(str_detect(new_df$transcript_name[!is.na(new_df$transcript_name)], "Cers1-Gdf1"))
 
 
-#### 7. Save the optimized genome annotation in a new gtf file ####
+#### 8. Save the optimized genome annotation in a new gtf file ####
 ###################################################################
 
 new_gtf = makeGRangesFromDataFrame(new_df, keep.extra.columns=TRUE)
