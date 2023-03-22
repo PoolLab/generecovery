@@ -11,13 +11,14 @@
 #    - "overlapping_gene_list.csv" file specifying how to resolve gene overlap derived issues. "Delete" entries in $final_classification field mark genes for deletion. Transcript names in $transcripts_for_deletion mark specific transcripts for deletion.
 #    - "gene_extension_candidates.csv" specifying updated gene boundaries for incorporating intergenic reads
 #    - "rename_genes.csv" specifying gene names to be replaced and new names (under $old_names and $new_names fields, respectively)
-# 1. Creates pre-mRNA genome annotation from input genome annotation. This step extracts all transcript entries from the genome annotation and defines them as full length exons with new transcript IDs and corresponding transcripts. This allows to capture many intronically mapped reads that otherwise get discarded.
-# 2. Gene deletion step: Deletes all annotation entries for genes destined for deletion (has "Delete" entry in $final_classification field of "overlapping_gene_list.csv"
-# 3. Transcript deletion step: Deletes all transcripts destined for deletion (transcript names listed in the "transcripts_for_deletion" column in ""overlapping_gene_list.csv"
-# 4. Gene coordinate adjustment step: replace the left most or right most coordinate of the first exon of a gene in genome annotation if there is a coordinate in columns $new_left or $new_right in the "gene_extension_candidates.csv".
-# 5. Add pre-mRNA reads to all genes not in the gene overlap list.
-# 6. Rename genes to avoid discarding expression data with near perfect terminal exon overlap.
-# 7. Save the optimized genome annotation in a new gtf file
+# 1. Resolves "self-overlapping" gene derived read loss by giving single gene_id to multi-id genes.
+# 2. Creates pre-mRNA genome annotation from input genome annotation. This step extracts all transcript entries from the genome annotation and defines them as full length exons with new transcript IDs and corresponding transcripts. This allows to capture many intronically mapped reads that otherwise get discarded.
+# 3. Gene deletion step: Deletes all annotation entries for genes destined for deletion (has "Delete" entry in $final_classification field of "overlapping_gene_list.csv"
+# 4. Transcript deletion step: Deletes all transcripts destined for deletion (transcript names listed in the "transcripts_for_deletion" column in ""overlapping_gene_list.csv"
+# 5. Gene coordinate adjustment step: replace the left most or right most coordinate of the first exon of a gene in genome annotation if there is a coordinate in columns $new_left or $new_right in the "gene_extension_candidates.csv".
+# 6. Add pre-mRNA reads to all genes not in the gene overlap list.
+# 7. Rename genes to avoid discarding expression data with near perfect terminal exon overlap.
+# 8. Save the optimized genome annotation in a new gtf file
 
 
 #### 0. Load libraries and import data ####
@@ -43,8 +44,35 @@ boundary_fix = read.csv("gene_extension_candidates.csv", header=T)
 
 rename_genes = read.csv("rename_genes.csv", header=T)
 
-new_df = exonic_df
+#### 1. Resolve "self-overlapping" gene derived read loss ####
+##############################################################
 
+length(unique(exonic_df$gene_name)) # number of all genes
+length(unique(exonic_df$gene_id)) # number of all gene_id-s
+
+## Which genes are self-overlapping
+
+all_genes = unique(exonic_df$gene_name)
+
+genes_of_interest = rep(0, length(all_genes))
+
+for (i in 1:length(all_genes)){
+  genes_of_interest[i] = length(unique(exonic_df$gene_id[exonic_df$gene_name == all_genes[i]]))
+}
+
+selector = genes_of_interest>1
+
+self_overlappers = all_genes[selector]
+
+## Resolve self-overlapping gene issue by giving single gene_id to multi-id genes
+
+for (i in self_overlappers){
+  singular_gene_id = exonic_df[exonic_df$gene_name == i,]$gene_id[1]
+  exonic_df[exonic_df$gene_name == i,]$gene_id = rep(singular_gene_id, nrow(exonic_df[exonic_df$gene_name == i,]))
+}
+
+
+new_df = exonic_df
 rm(exonic_df)
 
 ####  1. Create premRNA genome annotation from input gtf that defines transcripts as exons ####
