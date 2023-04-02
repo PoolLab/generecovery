@@ -11,13 +11,14 @@
 #    - "overlapping_gene_list.csv" file specifying how to resolve gene overlap derived issues. "Delete" entries in $final_classification field mark genes for deletion. Transcript names in $transcripts_for_deletion mark specific transcripts for deletion.
 #    - "gene_extension_candidates.csv" specifying updated gene boundaries for incorporating intergenic reads
 #    - "rename_genes.csv" specifying gene names to be replaced and new names (under $old_names and $new_names fields, respectively)
-# 1. Creates pre-mRNA genome annotation from input genome annotation. This step extracts all transcript entries from the genome annotation and defines them as full length exons with new transcript IDs and corresponding transcripts. This allows to capture many intronically mapped reads that otherwise get discarded.
-# 2. Gene deletion step: Deletes all annotation entries for genes destined for deletion (has "Delete" entry in $final_classification field of "overlapping_gene_list.csv"
-# 3. Transcript deletion step: Deletes all transcripts destined for deletion (transcript names listed in the "transcripts_for_deletion" column in ""overlapping_gene_list.csv"
-# 4. Gene coordinate adjustment step: replace the left most or right most coordinate of the first exon of a gene in genome annotation if there is a coordinate in columns $new_left or $new_right in the "gene_extension_candidates.csv".
-# 5. Add pre-mRNA reads to all genes not in the gene overlap list.
-# 6. Rename genes to avoid discarding expression data with near perfect terminal exon overlap.
-# 7. Save the optimized genome annotation in a new gtf file
+# 1. Resolve "self-overlapping" gene (duplicate gene_ids) derived issues. Required for compatibility with multiomic datasets.
+# 2. Create pre-mRNA genome annotation from input genome annotation. This step extracts all transcript entries from the genome annotation and defines them as full length exons with new transcript IDs and corresponding transcripts. This allows to capture many intronically mapped reads that otherwise get discarded.
+# 3. Gene deletion step: Deletes all annotation entries for genes destined for deletion (has "Delete" entry in $final_classification field of "overlapping_gene_list.csv"
+# 4. Transcript deletion step: Deletes all transcripts destined for deletion (transcript names listed in the "transcripts_for_deletion" column in ""overlapping_gene_list.csv"
+# 5. Gene coordinate adjustment step: replace the left most or right most coordinate of the first exon of a gene in genome annotation if there is a coordinate in columns $new_left or $new_right in the "gene_extension_candidates.csv".
+# 6. Add pre-mRNA reads to all genes not in the gene overlap list.
+# 7. Rename genes to avoid discarding expression data with near perfect terminal exon overlap.
+# 8. Save the optimized genome annotation in a new gtf file
 
 
 #### 0. Load libraries and import data ####
@@ -27,7 +28,6 @@ install.packages("gdata")
 install.packages("stringr")
 BiocManager::install("rtracklayer")
 BiocManager::install("GenomicRanges")
-
 
 library("rtracklayer")
 library("gdata")
@@ -43,10 +43,32 @@ boundary_fix = read.csv("gene_extension_candidates.csv", header=T)
 
 rename_genes = read.csv("rename_genes.csv", header=T)
 
+#### 1. Resolve "self-overlapping" gene (duplicate gene_ids) derived issues ####
+################################################################################
+
+length(unique(exonic_df$gene_name)) # number of all genes
+length(unique(exonic_df$gene_id)) # number of all gene_id-s
+
+## Which genes are self-overlapping
+
+all_genes = unique(exonic_df$gene_name)
+
+genes_of_interest = rep(0, length(all_genes))
+
+for (i in 1:length(all_genes)){
+  genes_of_interest[i] = length(unique(exonic_df$gene_id[exonic_df$gene_name == all_genes[i]]))
+}
+
+selector = genes_of_interest>1
+
+self_overlappers = all_genes[selector]
+
+## Initiate the final dataframe for modification
+
 new_df = exonic_df
 rm(exonic_df)
 
-####  1. Create premRNA genome annotation from input gtf that defines transcripts as exons ####
+####  2. Create premRNA genome annotation from input gtf that defines transcripts as exons ####
 ###############################################################################################
 
 # Note: several methods are available for recovering intronic reads from scRNA-seq data. These
@@ -79,13 +101,13 @@ premrna_df$transcript_id = gsub("000007", "110007", premrna_df$transcript_id)
 premrna_df$transcript_id = gsub("000008", "110008", premrna_df$transcript_id)
 premrna_df$transcript_id = gsub("000009", "110009", premrna_df$transcript_id)
 
-####  2. Delete select genes ####
+####  3. Delete select genes ####
 #################################
 
 genes_to_delete = overlap_df$genes[overlap_df$final_classification == "Delete"]
 new_df = new_df[!new_df$gene_name %in% genes_to_delete,]
 
-####  3. Delete select transcripts ####
+####  4. Delete select transcripts ####
 #######################################
 
 transcripts_to_delete = overlap_df$transcripts_for_deletion
@@ -106,7 +128,7 @@ transcripts_to_delete = transcripts_to_delete_final
 new_df = new_df[!new_df$transcript_name %in% transcripts_to_delete,]
 
 
-####  4. Adjust gene coordinates ####
+####  5. Adjust gene coordinates ####
 #####################################
 
 left_genes = as.data.frame(cbind(boundary_fix$genes[!is.na(boundary_fix$update_start)], boundary_fix$update_start[!is.na(boundary_fix$update_start)]))
@@ -135,17 +157,18 @@ for (i in 1:dim(right_genes)[1]){
   right_exon_difs[i] = new_df[last_gene_exon, 3] - new_df[last_gene_exon, 2]
 }
 
-#### 5. Add pre-mRNA transcripts to genes not in the gene overlap list ####
+#### 6. Add pre-mRNA transcripts to genes not in the gene overlap list ####
 ############################################################################
 
 # Explanation: Cellranger --include-introns mode unfortunately does not pick up on many intronic reads (unclear why despite lengthy correspondence with their support). I can pick those up however if I add the pre-mRNA transcripts to respective genes as exons with new transcript_id values.
 
 ## Genes to modify
 
-# Note that all genes in the overlap gene list (overlap_df$genes) will be excluded from this step to avoid the introduction of large exonic overlaps between genes
+# Note that all genes in the overlap gene list (overlap_df$genes) will be excluded from this step to avoid the introduction of large exonic overlaps between genes. Also, excluding duplicate gene_id genes (self_overlappers) to avoid errors with assembling multiomic references.
 
 genes_to_append = unique(new_df$gene_name)
 genes_to_append = setdiff(genes_to_append, overlap_df$genes)
+genes_to_append = setdiff(genes_to_append, self_overlappers)
 
 ## Reformat the final gtf dataframe such that we can add premrna data to it
 
@@ -162,7 +185,7 @@ for (i in genes_to_append){
   new_df = rbind(first_section, insert, last_section)
 }
 
-#### 6. Rename desired genes ####
+#### 7. Rename desired genes ####
 #################################
 
 # Rename desired genes (example from mouse genome): "Cers1"==>"Cers1_Gdf1" // "Chtf8" ==> "Chtf8_Derpc" // "Insl3" ==> "Insl3_Jak3" // "Pcdhga1" ==> "Pcdhg_all" // "Pcdha1" ==> "Pcdha_all" // "Ugt1a10" ==> "Ugt1a_all" // "4933427D14Rik" ==> "4933427D14Rik_Gm43951" // "Mkks" ==> "Mkks_plus"
@@ -182,7 +205,7 @@ sum(str_detect(new_df$transcript_name[!is.na(new_df$transcript_name)], "Cers1"))
 sum(str_detect(new_df$transcript_name[!is.na(new_df$transcript_name)], "Cers1-Gdf1"))
 
 
-#### 7. Save the optimized genome annotation in a new gtf file ####
+#### 8. Save the optimized genome annotation in a new gtf file ####
 ###################################################################
 
 new_gtf = makeGRangesFromDataFrame(new_df, keep.extra.columns=TRUE)
