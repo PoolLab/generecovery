@@ -188,7 +188,7 @@ for (i in genes_to_append){
 #### 7. Rename desired genes ####
 #################################
 
-# Rename desired genes (example from mouse genome): "Cers1"==>"Cers1_Gdf1" // "Chtf8" ==> "Chtf8_Derpc" // "Insl3" ==> "Insl3_Jak3" // "Pcdhga1" ==> "Pcdhg_all" // "Pcdha1" ==> "Pcdha_all" // "Ugt1a10" ==> "Ugt1a_all" // "4933427D14Rik" ==> "4933427D14Rik_Gm43951" // "Mkks" ==> "Mkks_plus"
+# Rename desired genes
 
 old_names = rename_genes$old_names
 new_names = rename_genes$new_names
