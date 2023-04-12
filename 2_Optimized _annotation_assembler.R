@@ -198,13 +198,6 @@ for (i in 1:length(old_names)){
   new_df$gene_name = str_replace_all(new_df$gene_name, old_names[i], new_names[i])
 } 
 
-sum(str_detect(new_df$gene_name, "Cers1"))
-sum(str_detect(new_df$gene_name, "Cers1-Gdf1"))
-
-sum(str_detect(new_df$transcript_name[!is.na(new_df$transcript_name)], "Cers1"))
-sum(str_detect(new_df$transcript_name[!is.na(new_df$transcript_name)], "Cers1-Gdf1"))
-
-
 #### 8. Save the optimized genome annotation in a new gtf file ####
 ###################################################################
 
